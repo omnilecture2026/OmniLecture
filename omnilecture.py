@@ -465,6 +465,9 @@ with tab6:
                             )
                             answer_text = response.text
                             st.markdown(answer_text)
+
+   st.sidebar.markdown("---")
+st.sidebar.markdown("👨‍💻 Developed by 𝓌𝒶𝓁𝒶𝒶 𝓈𝒶𝓁𝒾𝓂 ༄")                         
                             st.session_state.chat_history.append({"role": "assistant", "content": answer_text})
                         except Exception as e:
                             err_msg = f"Error generating response: {str(e)}"
