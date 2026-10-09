@@ -467,6 +467,6 @@ with tab6:
                             st.markdown(answer_text)
 
                         except Exception as e:
-    st.error(f"Error: {e}")
-st.sidebar.markdown("---")
-st.sidebar.markdown("👨‍💻 Developed by walaa salim ༄")
+                            st.error(f"Error: {e}")
+                            st.sidebar.markdown("---")
+                            st.sidebar.markdown("👨‍💻 Developed by walaa salim ༄")
