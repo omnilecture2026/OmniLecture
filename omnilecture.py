@@ -1,5 +1,4 @@
 import os
-import base
 import base64
 import streamlit as st
 from pypdf import PdfReader
