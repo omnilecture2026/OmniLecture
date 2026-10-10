@@ -1,28 +1,14 @@
-import streamlit as st
 import os
+import base
 import base64
-import json
+import streamlit as st
+from pypdf import PdfReader
+from google import genai
+from google.genai import types
 
-# Try importing PDF reading libraries
-try:
-    from pypdf import PdfReader
-    PDF_LIB = "pypdf"
-except ImportError:
-    try:
-        from PyPDF2 import PdfReader
-        PDF_LIB = "PyPDF2"
-    except ImportError:
-        PDF_LIB = None
-
-# Try importing google-genai for AI Professor & Exam generation
-try:
-    from google import genai
-    from google.genai import types
-    GEMINI_AVAILABLE = True
-except ImportError:
-    GEMINI_AVAILABLE = False
-
-# 1. Page Configuration & High-Contrast Dark Theme
+# ---------------------------------------------------------------------------
+# PAGE CONFIGURATION & HIGH-CONTRAST DARK THEME STYLING
+# ---------------------------------------------------------------------------
 st.set_page_config(
     page_title="OmniLecture - AI Study Assistant",
     page_icon="🎓",
@@ -30,414 +16,445 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for High-Contrast Dark Theme (Neon Blue & Charcoal) & Sidebar Footer Signature
 st.markdown("""
 <style>
-    /* Dark Theme Base */
+    /* Global Dark Theme Background & Neon Accent Styling */
     .stApp {
-        background-color: #0d1117;
-        color: #c9d1d9;
+        background-color: #0b0f19;
+        color: #f3f4f6;
+        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     }
     
     /* Sidebar Styling */
-    section[data-testid="stSidebar"] {
-        background-color: #161b22;
-        border-right: 1px solid #30363d;
+    [data-testid="stSidebar"] {
+        background-color: #111827;
+        border-right: 1px solid #1f2937;
     }
     
-    /* Neon Blue Accents */
+    /* Headers & Typography */
     h1, h2, h3, h4, h5, h6 {
-        color: #58a6ff !important;
+        color: #60a5fa !important;
         font-weight: 700;
     }
     
-    /* Card/Container styling */
-    .stTabs [data-baseweb="tab-list"] {
+    /* Cards / Containers */
+    .css-1r7sldb, .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
     }
-    .stTabs [data-baseweb="tab"] {
-        background-color: #21262d;
-        border-radius: 6px;
-        color: #c9d1d9;
-        padding: 10px 16px;
-        font-weight: 600;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #1f6feb !important;
-        color: #ffffff !important;
+    
+    .metric-card {
+        background: #1e293b;
+        border: 1px solid #334155;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
     }
     
-    /* Buttons */
+    /* Custom Buttons */
     .stButton>button {
-        background-color: #238636;
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
         color: white;
-        border-radius: 6px;
-        border: none;
+        border-radius: 8px;
+        padding: 0.5rem 1rem;
         font-weight: 600;
+        border: none;
+        transition: all 0.3s ease;
     }
     .stButton>button:hover {
-        background-color: #2ea043;
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+        box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
     }
     
-    /* Sidebar Signature Styling */
+    /* Radio options styling */
+    .stRadio label {
+        color: #e2e8f0 !important;
+        font-size: 1rem !important;
+    }
+    
+    /* Signature styling */
     .sidebar-signature {
         position: fixed;
         bottom: 15px;
         left: 15px;
-        width: 250px;
+        width: 260px;
         font-size: 0.85rem;
-        color: #8b949e;
-        text-align: center;
-        background: #21262d;
-        padding: 8px;
+        color: #94a3b8;
+        background: #1e293b;
+        padding: 10px;
         border-radius: 8px;
-        border: 1px solid #30363d;
+        border: 1px solid #334155;
+        text-align: center;
         z-index: 999;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize Session State Variables
+# ---------------------------------------------------------------------------
+# SESSION STATE INITIALIZATION
+# ---------------------------------------------------------------------------
 if "pdf_text" not in st.session_state:
     st.session_state.pdf_text = ""
-if "pdf_bytes" not in st.session_state:
-    st.session_state.pdf_bytes = None
+if "file_name" not in st.session_state:
+    st.session_state.file_name = ""
 if "summary_data" not in st.session_state:
     st.session_state.summary_data = None
-if "mcqs" not in st.session_state:
-    st.session_state.mcqs = []
-if "quiz_submitted" not in st.session_state:
-    st.session_state.quiz_submitted = False
-if "user_answers" not in st.session_state:
-    st.session_state.user_answers = {}
-if "flashcards" not in st.session_state:
-    st.session_state.flashcards = []
-if "glossary" not in st.session_state:
-    st.session_state.glossary = []
+if "exam_data" not in st.session_state:
+    st.session_state.exam_data = None
+if "flashcards_data" not in st.session_state:
+    st.session_state.flashcards_data = None
+if "glossary_data" not in st.session_state:
+    st.session_state.glossary_data = None
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
+if "exam_submitted" not in st.session_state:
+    st.session_state.exam_submitted = False
 
-def extract_pdf_content(uploaded_file):
-    """Extracts text and raw bytes from uploaded PDF."""
-    if PDF_LIB is None:
-        return "Error: pypdf or PyPDF2 library not installed.", None
-    try:
-        bytes_data = uploaded_file.read()
-        uploaded_file.seek(0)
-        reader = PdfReader(uploaded_file)
-        text = ""
-        for page in reader.pages:
-            t = page.extract_text()
-            if t:
-                text += t + "\n"
-        return text, bytes_data
-    except Exception as e:
-        return f"Error reading PDF: {str(e)}", None
-
-def get_gemini_client():
-    """Initializes Google GenAI client safely."""
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key and "GEMINI_API_KEY" in st.secrets:
-        api_key = st.secrets["GEMINI_API_KEY"]
-    
-    if api_key and GEMINI_AVAILABLE:
-        return genai.Client(api_key=api_key)
-    return None
-
-def generate_ai_analysis(text):
-    """Generates structured JSON data using Gemini API or robust fallback."""
-    client = get_gemini_client()
-    
-    prompt = f"""
-    Analyze the following lecture/document text and return a valid JSON object with the exact keys:
-    1. "summary_sections": A list of objects containing "topic", "summary_en", "benefit_en", and "translation_ar".
-    2. "mcqs": A list of exactly 30 multiple-choice questions divided into three difficulty levels: 10 "Easy", 10 "Medium", and 10 "Hard". Each question object must have: "level" ("Easy"/"Medium"/"Hard"), "question", "options" (list of 4 choices), "answer", and "explanation".
-    3. "flashcards": A list of 6-10 objects with "front" (question/concept) and "back" (answer/definition).
-    4. "glossary": A list of 8-15 technical/engineering terms with "term", "definition", and "translation_ar".
-
-    Document text excerpt:
-    {text[:12000]}
-    """
-    
-    if client:
-        try:
-            response = client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    temperature=0.3
-                )
-            )
-            data = json.loads(response.text)
-            return data
-        except Exception as e:
-            st.error(f"AI API generation error: {e}. Falling back to structured parser.")
-
-    # Fallback algorithmic parser if API key is missing or fails
-    return get_fallback_data(text)
-
-def get_fallback_data(text):
-    """Generates comprehensive fallback study materials."""
-    words = text.split()
-    sample_text = " ".join(words[:500]) if words else "No text provided."
-    
-    summary_sections = [
-        {
-            "topic": "Core Concepts & Fundamentals",
-            "summary_en": f"Overview of primary themes: {sample_text[:150]}...",
-            "benefit_en": "Establishes foundational knowledge required for advanced topics.",
-            "translation_ar": "نظرة عامة على المواضيع الأساسية وتأسيس المعرفة المطلوبة للفهم المتقدم."
-        },
-        {
-            "topic": "Methodological Framework & Analysis",
-            "summary_en": "Deep dive into structural mechanisms, algorithms, or theoretical derivations.",
-            "benefit_en": "Enables practical problem-solving and critical technical evaluation.",
-            "translation_ar": "الغوص العميق في الآليات الهيكلية والخوارزميات والاشتقاقات النظرية لحل المشكلات."
-        }
-    ]
-    
-    mcqs = []
-    levels = ["Easy"] * 10 + ["Medium"] * 10 + ["Hard"] * 10
-    for i, level in enumerate(levels, 1):
-        mcqs.append({
-            "level": level,
-            "question": f"[{level} Q{i}] What is a key principle or takeaway related to section {i}?",
-            "options": ["Option A: Primary structural methodology", "Option B: Secondary theoretical constraint", "Option C: Alternative empirical observation", "Option D: Randomized control parameter"],
-            "answer": "Option A: Primary structural methodology",
-            "explanation": f"Explanation for Q{i}: The core text emphasizes structural methodology in this context."
-        })
-        
-    flashcards = [
-        {"front": "What is the primary objective?", "back": "To establish rigorous analytical models."},
-        {"front": "Key Engineering Metric", "back": "Efficiency, throughput, and structural stability."}
-    ]
-    
-    glossary = [
-        {"term": "Algorithm", "definition": "A step-by-step procedure for calculations.", "translation_ar": "خوارزمية - خطوات حسابية متسلسلة"},
-        {"term": "Throughput", "definition": "Rate of successful data or material processing.", "translation_ar": "الإنتاجية - معدل المعالجة الناجحة"}
-    ]
-    
-    return {
-        "summary_sections": summary_sections,
-        "mcqs": mcqs,
-        "flashcards": flashcards,
-        "glossary": glossary
-    }
-
-# --- SIDEBAR CONFIGURATION ---
+# ---------------------------------------------------------------------------
+# SIDEBAR - NAVIGATION & PDF UPLOAD
+# ---------------------------------------------------------------------------
 with st.sidebar:
-    st.title("⚙️ OmniLecture Control")
-    st.markdown("Upload your lecture PDF to generate AI study materials.")
+    st.markdown("## 🎓 OmniLecture")
+    st.markdown("### AI Study Assistant")
+    st.markdown("---")
     
+    # API Key Input
+    api_key_input = st.text_input("Gemini API Key", type="password", placeholder="Enter your Gemini API key...")
+    
+    st.markdown("---")
+    st.markdown("### 📂 Document Upload")
     uploaded_file = st.file_uploader("Upload Lecture PDF", type=["pdf"])
     
     if uploaded_file is not None:
-        st.success(f"File Loaded: `{uploaded_file.name}`")
-        if st.button("🚀 Process & Analyze Document", use_container_width=True):
-            with st.spinner("Analyzing document structure & building AI study suite..."):
-                text, b_data = extract_pdf_content(uploaded_file)
-                st.session_state.pdf_text = text
-                st.session_state.pdf_bytes = b_data
-                st.session_state.summary_data = generate_ai_analysis(text)
-                st.session_state.quiz_submitted = False
-                st.session_state.user_answers = {}
+        if st.session_state.file_name != uploaded_file.name:
+            st.session_state.file_name = uploaded_file.name
+            # Extract text using pypdf
+            try:
+                reader = PdfReader(uploaded_file)
+                extracted_text = ""
+                for page in reader.pages:
+                    text = page.extract_text()
+                    if text:
+                        extracted_text += text + "\n"
+                st.session_state.pdf_text = extracted_text
+                uploaded_file.seek(0) # Reset pointer for viewer
+                st.session_state.pdf_bytes = uploaded_file.read()
+                
+                # Reset previous caches on new file upload
+                st.session_state.summary_data = None
+                st.session_state.exam_data = None
+                st.session_state.flashcards_data = None
+                st.session_state.glossary_data = None
                 st.session_state.chat_history = []
-                st.success("Analysis Complete!")
-
-    st.markdown("---")
-    st.markdown("### 📚 Quick Guide")
-    st.info("Navigate through the tabs above to explore bilingual summaries, adaptive exams, flashcards, original PDF view, and the AI Professor.")
+                st.session_state.exam_submitted = False
+                st.success("PDF processed successfully!")
+            except Exception as e:
+                st.error(f"Error reading PDF: {e}")
+        
+        st.info(f"**File:** {st.session_state.file_name}\n\n**Length:** {len(st.session_state.pdf_text)} characters")
     
-    # PERMANENT SIGNATURE IN BOTTOM-LEFT OF SIDEBAR
+    # Permanent Signature requested precisely at the bottom-left of sidebar
     st.markdown("""
         <div class="sidebar-signature">
             👨‍💻 𝒟ℯ𝓋ℯ𝓁ℴ𝓅ℯ𝒹 𝒷𝓎 𝓌𝒶𝓁𝒶𝒶 𝓈𝒶𝓁𝒾𝓂 ༄
         </div>
     """, unsafe_allow_html=True)
 
-# --- MAIN APP INTERFACE ---
-st.title("🎓 OmniLecture: Advanced AI Study Assistant")
-st.markdown("Your intelligent academic companion designed for deep comprehension, rigorous testing, and seamless document navigation.")
+# Helper function to get Gemini Client
+def get_gemini_client():
+    if api_key_input:
+        return genai.Client(api_key=api_key_input)
+    env_key = os.environ.get("GEMINI_API_KEY")
+    if env_key:
+        return genai.Client(api_key=env_key)
+    return None
 
-# Tabs Structure
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "📖 Detailed Summary", 
-    "✍️ 30 MCQ Exam", 
-    "📊 Performance & Results", 
-    "🗂️ Flashcards & Glossary", 
-    "📄 Original PDF Viewer", 
-    "👨‍🏫 AI Professor Chatbot"
+# ---------------------------------------------------------------------------
+# MAIN APP HEADER
+# ---------------------------------------------------------------------------
+st.title("🚀 OmniLecture AI Study Assistant")
+st.markdown("Transform your academic materials into structured summaries, interactive adaptive exams, intelligent flashcards, and access your AI Professor instantly.")
+
+if not st.session_state.pdf_text:
+    st.warning("⚠️ Please upload a PDF lecture file from the left sidebar to begin processing your study materials.")
+    st.stop()
+
+# ---------------------------------------------------------------------------
+# TABS INTERFACE STRUCTURE
+# ---------------------------------------------------------------------------
+tabs = st.tabs([
+    "📖 Detailed Summary",
+    "✍️ 30 MCQ Exam",
+    "📊 Results & Review",
+    "🗂️ Flashcards & Glossary",
+    "📄 PDF Document Viewer",
+    "👨‍🏫 AI Professor Chat"
 ])
 
-# --- TAB 1: Detailed Summary & Bilingual Guide ---
-with tab1:
-    st.setHeader = st.header("Detailed Summary & Bilingual Guide")
-    st.markdown("Comprehensive breakdown of key topics, summaries, practical benefits, and complete Arabic translations.")
-    
-    if st.session_state.summary_data and "summary_sections" in st.session_state.summary_data:
-        for idx, sec in enumerate(st.session_state.summary_data["summary_sections"], 1):
-            with st.expander(f"📌 Section {idx}: {sec.get('topic', 'Main Topic')}", expanded=(idx==1)):
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown("#### 🇬🇧 English Summary & Benefits")
-                    st.markdown(f"**Summary:** {sec.get('summary_en', '')}")
-                    st.markdown(f"**Benefit / Takeaway:** {sec.get('benefit_en', '')}")
-                with col2:
-                    st.markdown("#### 🇸🇦 التوجيه والترجمة العربية")
-                    st.markdown(f"**الملخص بالعربية:** {sec.get('translation_ar', '')}")
-    else:
-        st.warning("⚠️ Please upload and process a PDF file from the sidebar to generate the summary.")
+client = get_gemini_client()
 
-# --- TAB 2: 30 MCQ Adaptive Exam ---
-with tab2:
-    st.header("30 MCQ Adaptive Exam")
-    st.markdown("Test your mastery across 30 questions categorized into Easy (1-10), Medium (11-20), and Hard (21-30) levels.")
+# ===========================================================================
+# TAB 1: DETAILED SUMMARY & BILINGUAL GUIDE
+# ===========================================================================
+with tabs[0]:
+    st.header("📖 Detailed Summary & Bilingual Guide")
+    st.markdown("Thorough breakdown of all main topics, key sections, practical benefits, paired with comprehensive Arabic translations.")
     
-    if st.session_state.summary_data and "mcqs" in st.session_state.summary_data:
-        mcqs = st.session_state.summary_data["mcqs"]
+    if st.button("Generate Detailed Bilingual Summary", key="gen_summary_btn"):
+        if not client:
+            st.error("Please provide a valid Gemini API Key in the sidebar.")
+        else:
+            with st.spinner("Analyzing document structure and translating key insights..."):
+                prompt = f"""
+                Analyze the following academic text extracted from a PDF lecture. 
+                Extract all major topics and sections. For each topic, provide:
+                1. Topic Title (English)
+                2. Detailed Summary (English)
+                3. Practical Benefit / Learning Outcome (English)
+                4. Full Professional Arabic Translation / Equivalent for the section & summary.
+
+                Format your response clearly using Markdown sections, bullet points, and headers.
+                
+                Document Text:
+                {st.session_state.pdf_text[:12000]}
+                """
+                try:
+                    response = client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=prompt
+                    )
+                    st.session_state.summary_data = response.text
+                except Exception as e:
+                    st.error(f"Error generating summary: {e}")
+                    
+    if st.session_state.summary_data:
+        st.markdown(st.session_state.summary_data)
+
+# ===========================================================================
+# TAB 2: 30 MCQ ADAPTIVE EXAM
+# ===========================================================================
+with tabs[1]:
+    st.header("✍️ 30 MCQ Adaptive Exam")
+    st.markdown("Test your deep comprehension with 30 rigorous multiple-choice questions extracted directly from the lecture material, categorized into Easy, Medium, and Hard levels.")
+    
+    if not st.session_state.exam_data:
+        if st.button("Generate 30-Question Adaptive Exam", key="gen_exam_btn"):
+            if not client:
+                st.error("Please provide a valid Gemini API Key in the sidebar.")
+            else:
+                with st.spinner("Extracting concepts and generating 30 high-level adaptive questions..."):
+                    prompt = f"""
+                    Based strictly on the following PDF document content, generate exactly 30 multiple-choice questions (MCQs).
+                    Divide the questions into 3 distinct difficulty tiers:
+                    - 10 Easy Questions (Level 1)
+                    - 10 Medium Questions (Level 2)
+                    - 10 Hard Questions (Level 3)
+
+                    You MUST output the result strictly in valid JSON format without markdown code blocks, structured as a list of objects, where each object has:
+                    - "id": integer (1 to 30)
+                    - "level": string ("Easy", "Medium", or "Hard")
+                    - "question": string
+                    - "options": list of 4 strings
+                    - "answer": string (exact match of the correct option)
+                    - "explanation": string (scientific explanation of why the answer is correct)
+
+                    Document Text:
+                    {st.session_state.pdf_text[:14000]}
+                    """
+                    try:
+                        response = client.models.generate_content(
+                            model='gemini-2.5-flash',
+                            contents=prompt,
+                            config=types.GenerateContentConfig(response_mime_type="application/json")
+                        )
+                        import json
+                        st.session_state.exam_data = json.loads(response.text)
+                        st.session_state.exam_submitted = False
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error generating exam data: {e}")
+    
+    if st.session_state.exam_data:
+        exam_questions = st.session_state.exam_data
         
         with st.form("exam_form"):
-            for idx, q in enumerate(mcqs):
-                level_badge = f"🟢 [{q.get('level', 'Easy')}]" if q.get('level')=='Easy' else ("🟡 [Medium]" if q.get('level')=='Medium' else "🔴 [Hard]")
-                st.subheader(f"Question {idx + 1} {level_badge}")
-                st.markdown(f"**{q.get('question')}**")
+            user_answers = {}
+            
+            for q in exam_questions:
+                q_id = q["id"]
+                level_badge = "🟢 Easy" if q["level"]=="Easy" else ("🟡 Medium" if q["level"]=="Medium" else "🔴 Hard")
+                st.markdown(f"**Q{q_id} ({level_badge}):** {q['question']}")
                 
-                choice = st.radio(
-                    f"Select answer for Q{idx+1}:",
-                    q.get("options"),
-                    key=f"mcq_{idx}",
+                # index=None makes sure all options are unselected by default
+                ans = st.radio(
+                    f"Select answer for Q{q_id}",
+                    options=q["options"],
+                    index=None,
+                    key=f"q_{q_id}",
                     label_visibility="collapsed"
                 )
-                st.session_state.user_answers[idx] = choice
+                user_answers[q_id] = ans
                 st.markdown("---")
                 
-            submitted = st.form_submit_button("Submit Exam & View Evaluation", type="primary")
+            submitted = st.form_submit_button("Submit Exam & View Results")
             if submitted:
-                st.session_state.quiz_submitted = True
-                st.success("Exam submitted successfully! Check the 'Performance & Results' tab for detailed corrections.")
-    else:
-        st.warning("⚠️ Please process a PDF document first to generate the exam.")
+                st.session_state.user_answers = user_answers
+                st.session_state.exam_submitted = True
+                st.success("Exam submitted successfully! Check the Results & Review tab.")
 
-# --- TAB 3: Performance & Detailed Results ---
-with tab3:
-    st.header("Performance & Detailed Results")
+# ===========================================================================
+# TAB 3: PERFORMANCE & DETAILED RESULTS
+# ===========================================================================
+with tabs[2]:
+    st.header("📊 Performance & Detailed Results")
     
-    if st.session_state.quiz_submitted and st.session_state.summary_data and "mcqs" in st.session_state.summary_data:
-        mcqs = st.session_state.summary_data["mcqs"]
-        score = 0
-        total = len(mcqs)
+    if not st.session_state.get("exam_submitted", False):
+        st.info("⚠️ Please complete and submit the 30 MCQ Exam in the previous tab to view your performance evaluation.")
+    else:
+        exam_data = st.session_state.exam_data
+        user_answers = st.session_state.user_answers
         
-        for idx, q in enumerate(mcqs):
-            user_ans = st.session_state.user_answers.get(idx)
-            if user_ans == q.get("answer"):
+        score = 0
+        total = len(exam_data)
+        
+        for q in exam_data:
+            if user_answers.get(q["id"]) == q["answer"]:
                 score += 1
                 
-        pct = (score / total) * 100 if total > 0 else 0
-        st.metric(label="Final Score", value=f"{score} / {total}", delta=f"{pct:.1f}%")
+        percentage = (score / total) * 100
         
-        if pct >= 80:
-            st.balloons()
-            st.success("🌟 Outstanding performance! You have fully mastered the lecture content.")
-        elif pct >= 50:
-            st.info("👍 Good job! Review the explanations below to polish your weak points.")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric(label="Final Score", value=f"{score} / {total}")
+        with col2:
+            st.metric(label="Percentage", value=f"{percentage:.1f}%")
+        with col3:
+            perf_grade = "Outstanding 🏆" if percentage >= 85 else ("Good Progress 👍" if percentage >= 60 else "Needs Review 📚")
+            st.metric(label="Evaluation", value=perf_grade)
+            
+        st.markdown("---")
+        st.subheader("Detailed Question Review & Scientific Explanations")
+        
+        for q in exam_data:
+            q_id = q["id"]
+            u_ans = user_answers.get(q_id)
+            c_ans = q["answer"]
+            is_correct = (u_ans == c_ans)
+            
+            status_icon = "✅" if is_correct else "❌"
+            st.markdown(f"### Q{q_id}: {q['question']} {status_icon}")
+            st.markdown(f"- **Your Answer:** `{u_ans if u_ans else 'No Answer Provided'}`")
+            st.markdown(f"- **Correct Answer:** `{c_ans}`")
+            st.markdown(f"- **Scientific Explanation:** {q['explanation']}")
+            st.markdown("---")
+
+# ===========================================================================
+# TAB 4: FLASHCARDS & ENGINEERING GLOSSARY
+# ===========================================================================
+with tabs[3]:
+    st.header("🗂️ Flashcards & Engineering Glossary")
+    st.markdown("Quick revision flashcards and a comprehensive technical glossary extracted from your document.")
+    
+    if st.button("Generate Flashcards & Glossary", key="gen_flash_btn"):
+        if not client:
+            st.error("Please provide a valid Gemini API Key in the sidebar.")
         else:
-            st.warning("📚 Recommendation: Re-read the detailed summaries and flashcards before retaking.")
-            
-        st.markdown("### 📝 Question-by-Question Review & Scientific Explanations")
-        for idx, q in enumerate(mcqs):
-            user_ans = st.session_state.user_answers.get(idx)
-            correct_ans = q.get("answer")
-            is_correct = (user_ans == correct_ans)
-            
-            with st.expander(f"Q{idx+1}: {q.get('question')} - {'✅ Correct' if is_correct else '❌ Incorrect'}"):
-                st.markdown(f"**Your Answer:** {user_ans}")
-                st.markdown(f"**Correct Answer:** {correct_ans}")
-                st.markdown(f"**Scientific Explanation:** {q.get('explanation', 'No detailed explanation provided.')}")
-    else:
-        st.info("ℹ️ You have not submitted the exam yet. Complete the exam in the '30 MCQ Exam' tab to see your evaluation here.")
+            with st.spinner("Extracting glossary terms and flashcard pairs..."):
+                prompt = f"""
+                Extract key academic/technical terms and definitions from the text, and create key flashcard questions.
+                Output strictly in valid JSON format without markdown code blocks with two keys:
+                1. "glossary": list of objects with keys "term", "definition", "arabic_translation"
+                2. "flashcards": list of objects with keys "front", "back"
 
-# --- TAB 4: Flashcards & Engineering Glossary ---
-with tab4:
-    st.header("Flashcards & Engineering Glossary")
-    
-    if st.session_state.summary_data:
-        tab_f1, tab_f2 = st.tabs(["🗂️ Flashcards", "📖 Technical Glossary"])
-        
-        with tab_f1:
-            st.markdown("### Quick-Review Flashcards")
-            flashcards = st.session_state.summary_data.get("flashcards", [])
-            for idx, fc in enumerate(flashcards, 1):
-                with st.expander(f"Flashcard {idx}: {fc.get('front')}"):
-                    st.markdown(f"**Answer / Definition:** {fc.get('back')}")
+                Document Text:
+                {st.session_state.pdf_text[:10000]}
+                """
+                try:
+                    response = client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=prompt,
+                        config=types.GenerateContentConfig(response_mime_type="application/json")
+                    )
+                    import json
+                    st.session_state.flash_glossary = json.loads(response.text)
+                except Exception as e:
+                    st.error(f"Error generating flashcards: {e}")
                     
-        with tab_f2:
-            st.markdown("### Searchable Engineering & Technical Glossary")
-            search_query = st.text_input("🔍 Search technical terms...", "")
-            glossary = st.session_state.summary_data.get("glossary", [])
-            
-            filtered_glossary = [g for g in glossary if search_query.lower() in g.get('term', '').lower() or search_query.lower() in g.get('definition', '').lower()]
-            
-            for item in filtered_glossary:
-                st.markdown(f"**{item.get('term')}** — *{item.get('translation_ar')}*")
-                st.markdown(f"> {item.get('definition')}")
-                st.markdown("---")
-    else:
-        st.warning("⚠️ Please process a PDF document first to view flashcards and glossary.")
+    if "flash_glossary" in st.session_state:
+        fg = st.session_state.flash_glossary
+        
+        st.subheader("📚 Technical Glossary & Definitions")
+        glossary_items = fg.get("glossary", [])
+        for item in glossary_items:
+            with st.expander(f"📌 {item.get('term', '')}"):
+                st.markdown(f"**Definition:** {item.get('definition', '')}")
+                st.markdown(f"**Arabic Translation:** {item.get('arabic_translation', '')}")
+                
+        st.markdown("---")
+        st.subheader("⚡ Quick Study Flashcards")
+        flashcards = fg.get("flashcards", [])
+        for i, fc in enumerate(flashcards):
+            col_f1, col_f2 = st.columns(2)
+            with col_f1:
+                st.info(f"**Card {i+1} (Front):**\n\n{fc.get('front', '')}")
+            with col_f2:
+                st.success(f"**Card {i+1} (Back):**\n\n{fc.get('back', '')}")
 
-# --- TAB 5: Original PDF Document Viewer ---
-with tab5:
-    st.header("Original PDF Document Viewer")
-    st.markdown("View the exact formatting and layout of your original uploaded lecture document.")
+# ===========================================================================
+# TAB 5: ORIGINAL PDF DOCUMENT VIEWER
+# ===========================================================================
+with tabs[4]:
+    st.header("📄 Original PDF Document Viewer")
+    st.markdown("View your original lecture document with full formatting preserved.")
     
-    if st.session_state.pdf_bytes is not None:
+    if "pdf_bytes" in st.session_state:
         base64_pdf = base64.b64encode(st.session_state.pdf_bytes).decode('utf-8')
         pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="800px" type="application/pdf"></iframe>'
         st.markdown(pdf_display, unsafe_allow_html=True)
     else:
-        st.warning("⚠️ No PDF file uploaded yet. Please upload a PDF file from the sidebar.")
+        st.info("No PDF document currently loaded.")
 
-# --- TAB 6: AI Professor Chatbot ---
-with tab6:
-    st.header("AI Professor Chatbot")
-    st.markdown("Chat with your virtual professor assistant who has thoroughly read and understood your uploaded lecture.")
+# ===========================================================================
+# TAB 6: AI PROFESSOR CHATBOT
+# ===========================================================================
+with tabs[5]:
+    st.header("👨‍🏫 AI Professor Chatbot")
+    st.markdown("Interact directly with your virtual professor assistant who has total context of your uploaded lecture file.")
     
     # Display chat history
     for message in st.session_state.chat_history:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
             
-    user_prompt = st.chat_input("Ask your professor any question about the lecture...")
-    if user_prompt:
-        st.session_state.chat_history.append({"role": "user", "content": user_prompt})
-        with st.chat_message("user"):
-            st.markdown(user_prompt)
-            
-        with st.chat_message("assistant"):
-            with st.spinner("Professor is formulating an answer..."):
-                client = get_germin_client = get_gemini_client()
-                response_text = ""
+    user_query = st.chat_input("Ask your professor anything about the lecture...")
+    if user_query:
+        if not client:
+            st.error("Please provide a valid Gemini API Key in the sidebar.")
+        else:
+            st.session_state.chat_history.append({"role": "user", "content": user_query})
+            with st.chat_message("user"):
+                st.markdown(user_query)
                 
-                context_prompt = f"""
-                You are an expert AI Professor Assistant. You have full knowledge of the following document text:
-                {st.session_state.pdf_text[:10000]}
-                
-                Answer the student's question accurately and professionally based strictly on this document context:
-                Student Question: {user_prompt}
-                """
-                
-                if client:
+            with st.chat_message("assistant"):
+                with st.spinner("Professor is thinking..."):
+                    system_instruction = f"""
+                    You are an expert AI Professor Assistant for the subject/lecture titled '{st.session_state.file_name}'.
+                    Your task is to answer student questions accurately, professionally, and pedagogically based strictly on the provided lecture document text.
+                    
+                    Document Context:
+                    {st.session_state.pdf_text}
+                    """
                     try:
-                        res = client.models.generate_content(
-                            model='gemini-2.5-flash',
-                            contents=context_prompt
+                        chat = client.chats.create(
+                            model="gemini-2.5-flash",
+                            config=types.GenerateContentConfig(system_instruction=system_instruction)
                         )
-                        response_text = res.text
+                        # Rebuild previous turns in chat session if needed, or send message with context
+                        response = chat.send_message(user_query)
+                        answer = response.text
+                        st.markdown(answer)
+                        st.session_state.chat_history.append({"role": "assistant", "content": answer})
                     except Exception as e:
-                        response_text = f"API Error: {e}. Falling back to standard answer."
-                
-                if not response_text:
-                    response_text = f"Based on the lecture text provided, regarding your question about '{user_prompt}', the document highlights fundamental principles and structured methodologies. Please review the summary tab for detailed points."
-                
-                st.markdown(response_text)
-                st.session_state.chat_history.append({"role": "assistant", "content": response_text})
+                        err_msg = f"Error communicating with AI Professor: {e}"
+                        st.error(err_msg)
+                        st.session_state.chat_history.append({"role": "assistant", "content": err_msg})
