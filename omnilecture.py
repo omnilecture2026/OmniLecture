@@ -8,7 +8,7 @@ from google.genai import types
 # ---------------------------------------------------------------------------
 # HARDCODED GEMINI API KEY CONFIGURATION (Permanent Background Key)
 # ---------------------------------------------------------------------------
-GEMINI_API_KEY = "AQ.Ab8RN6JI2P7-2lqC2GlzKzFuUPxVz7FPpqJ36ivCUYNVfq4vLA" # ضع مفتاحك الحقيقي هنا
+GEMINI_API_KEY = "AQ.Ab8RN6JI2P7-21qC2G1zKzFuUPxVz7FPpqJ36ivCUYNVfq4vLA"
 
 # ---------------------------------------------------------------------------
 # PAGE CONFIGURATION & HIGH-CONTRAST DARK THEME STYLING
@@ -91,7 +91,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
-# SESSION STATE INITIALIZATION
+# SESSION STATE INITIALIZATION (Clean & Error-Free Variables)
 # ---------------------------------------------------------------------------
 if "pdf_text" not in st.session_state:
     st.session_state.pdf_text = ""
@@ -153,19 +153,12 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
-# CORRECTED GENAI CLIENT INITIALIZATION
+# CORRECTED GENAI CLIENT INITIALIZATION (google-genai SDK)
 # ---------------------------------------------------------------------------
 def get_gemini_client():
-    # استخدام الطريقة الصحيحة والحديثة لإنشاء العميل مع مفتاح الـ API المباشر
-    if GEMINI_API_KEY and GEMINI_API_KEY != "YOUR_ACTUAL_API_KEY_HERE":
+    if GEMINI_API_KEY:
         return genai.Client(api_key=GEMINI_API_KEY)
-    
-    # محاولة جلب المفتاح من متغيرات البيئة إن وجد
-    env_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-    if env_key:
-        return genai.Client(api_key=env_key)
-        
-    return genai.Client(api_key=GEMINI_API_KEY)
+    return genai.Client()
 
 # ---------------------------------------------------------------------------
 # MAIN APP HEADER
@@ -217,9 +210,8 @@ with tabs[0]:
                 {st.session_state.pdf_text[:12000]}
                 """
                 try:
-                    # استدعاء النموذج بالطريقة الحديثة
                     response = client.models.generate_content(
-                        model='gemini-2.5-flash',
+                        model='gemini-1.5-flash',
                         contents=prompt
                     )
                     st.session_state.summary_data = response.text
@@ -262,7 +254,7 @@ with tabs[1]:
                     """
                     try:
                         response = client.models.generate_content(
-                            model='gemini-2.5-flash',
+                            model='gemini-1.5-flash',
                             contents=prompt,
                             config=types.GenerateContentConfig(response_mime_type="application/json")
                         )
@@ -369,7 +361,7 @@ with tabs[3]:
                 """
                 try:
                     response = client.models.generate_content(
-                        model='gemini-2.5-flash',
+                        model='gemini-1.5-flash',
                         contents=prompt,
                         config=types.GenerateContentConfig(response_mime_type="application/json")
                     )
@@ -443,7 +435,7 @@ with tabs[5]:
                     """
                     try:
                         chat = client.chats.create(
-                            model="gemini-2.5-flash",
+                            model="gemini-1.5-flash",
                             config=types.GenerateContentConfig(system_instruction=system_instruction)
                         )
                         response = chat.send_message(user_query)
