@@ -41,11 +41,7 @@ st.markdown("""
         font-weight: 700;
     }
     
-    /* Cards / Containers */
-    .css-1r7sldb, .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-    }
-    
+    /* Metric Card / Containers */
     .metric-card {
         background: #1e293b;
         border: 1px solid #334155;
@@ -105,17 +101,15 @@ if "summary_data" not in st.session_state:
     st.session_state.summary_data = None
 if "exam_data" not in st.session_state:
     st.session_state.exam_data = None
-if "flashcards_data" not in st.session_state:
-    st.session_state.flashcards_data = None
-if "glossary_data" not in st.session_state:
-    st.session_state.glossary_data = None
+if "flash_glossary" not in st.session_state:
+    st.session_state.flash_glossary = None
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 if "exam_submitted" not in st.session_state:
     st.session_state.exam_submitted = False
 
 # ---------------------------------------------------------------------------
-# SIDEBAR - NAVIGATION & PDF UPLOAD (API Input removed completely)
+# SIDEBAR - NAVIGATION & PDF UPLOAD
 # ---------------------------------------------------------------------------
 with st.sidebar:
     st.markdown("## 🎓 OmniLecture")
@@ -142,8 +136,7 @@ with st.sidebar:
                 # Reset previous caches on new file upload
                 st.session_state.summary_data = None
                 st.session_state.exam_data = None
-                st.session_state.flashcards_data = None
-                st.session_state.glossary_data = None
+                st.session_state.flash_glossary = None
                 st.session_state.chat_history = []
                 st.session_state.exam_submitted = False
                 st.success("PDF processed successfully!")
@@ -159,13 +152,19 @@ with st.sidebar:
         </div>
     """, unsafe_allow_html=True)
 
-# Helper function to get Gemini Client using the hardcoded key
+# ---------------------------------------------------------------------------
+# CORRECTED GENAI CLIENT INITIALIZATION
+# ---------------------------------------------------------------------------
 def get_gemini_client():
+    # استخدام الطريقة الصحيحة والحديثة لإنشاء العميل مع مفتاح الـ API المباشر
     if GEMINI_API_KEY and GEMINI_API_KEY != "YOUR_ACTUAL_API_KEY_HERE":
         return genai.Client(api_key=GEMINI_API_KEY)
-    env_key = os.environ.get("GEMINI_API_KEY")
+    
+    # محاولة جلب المفتاح من متغيرات البيئة إن وجد
+    env_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     if env_key:
         return genai.Client(api_key=env_key)
+        
     return genai.Client(api_key=GEMINI_API_KEY)
 
 # ---------------------------------------------------------------------------
@@ -218,6 +217,7 @@ with tabs[0]:
                 {st.session_state.pdf_text[:12000]}
                 """
                 try:
+                    # استدعاء النموذج بالطريقة الحديثة
                     response = client.models.generate_content(
                         model='gemini-2.5-flash',
                         contents=prompt
@@ -378,7 +378,7 @@ with tabs[3]:
                 except Exception as e:
                     st.error(f"Error generating flashcards: {e}")
                     
-    if "flash_glossary" in st.session_state:
+    if st.session_state.flash_glossary:
         fg = st.session_state.flash_glossary
         
         st.subheader("📚 Technical Glossary & Definitions")
