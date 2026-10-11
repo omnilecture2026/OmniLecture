@@ -91,7 +91,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
-# SESSION STATE INITIALIZATION (Clean & Error-Free Variables)
+# SESSION STATE INITIALIZATION
 # ---------------------------------------------------------------------------
 if "pdf_text" not in st.session_state:
     st.session_state.pdf_text = ""
@@ -153,12 +153,10 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
-# CORRECTED GENAI CLIENT INITIALIZATION (google-genai SDK)
+# DIRECT GENAI CLIENT INITIALIZATION (Pure API Key, No OAuth)
 # ---------------------------------------------------------------------------
 def get_gemini_client():
-    if GEMINI_API_KEY:
-        return genai.Client(api_key=GEMINI_API_KEY)
-    return genai.Client()
+    return genai.Client(api_key=GEMINI_API_KEY)
 
 # ---------------------------------------------------------------------------
 # MAIN APP HEADER
@@ -193,7 +191,7 @@ with tabs[0]:
     
     if st.button("Generate Detailed Bilingual Summary", key="gen_summary_btn"):
         if not client:
-            st.error("Gemini Client initialization failed. Check your API key.")
+            st.error("Gemini Client initialization failed.")
         else:
             with st.spinner("Analyzing document structure and translating key insights..."):
                 prompt = f"""
@@ -231,7 +229,7 @@ with tabs[1]:
     if not st.session_state.exam_data:
         if st.button("Generate 30-Question Adaptive Exam", key="gen_exam_btn"):
             if not client:
-                st.error("Gemini Client initialization failed. Check your API key.")
+                st.error("Gemini Client initialization failed.")
             else:
                 with st.spinner("Extracting concepts and generating 30 high-level adaptive questions..."):
                     prompt = f"""
@@ -347,7 +345,7 @@ with tabs[3]:
     
     if st.button("Generate Flashcards & Glossary", key="gen_flash_btn"):
         if not client:
-            st.error("Gemini Client initialization failed. Check your API key.")
+            st.error("Gemini Client initialization failed.")
         else:
             with st.spinner("Extracting glossary terms and flashcard pairs..."):
                 prompt = f"""
@@ -418,7 +416,7 @@ with tabs[5]:
     user_query = st.chat_input("Ask your professor anything about the lecture...")
     if user_query:
         if not client:
-            st.error("Gemini Client initialization failed. Check your API key.")
+            st.error("Gemini Client initialization failed.")
         else:
             st.session_state.chat_history.append({"role": "user", "content": user_query})
             with st.chat_message("user"):
