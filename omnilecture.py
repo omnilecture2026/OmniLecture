@@ -2,16 +2,15 @@ import os
 import base64
 import streamlit as st
 from pypdf import PdfReader
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 
 # ---------------------------------------------------------------------------
 # HARDCODED GEMINI API KEY CONFIGURATION (Permanent Background Key)
 # ---------------------------------------------------------------------------
 GEMINI_API_KEY = "AQ.Ab8RN6JI2P7-21qC2G1zKzFuUPxVz7FPpqJ36ivCUYNVfq4vLA"
 
-# تعيين مفتاح البيئة مباشرة لتجنب أي محاولة اتصال تعتمد على ADC أو OAuth
-os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY
+# إعداد وتكوين المفتاح باستخدام المكتبة الكلاسيكية المستقرة
+genai.configure(api_key=GEMINI_API_KEY)
 
 # ---------------------------------------------------------------------------
 # PAGE CONFIGURATION & HIGH-CONTRAST DARK THEME STYLING
@@ -156,13 +155,6 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
-# DIRECT GENAI CLIENT INITIALIZATION (Using Environment Variable)
-# ---------------------------------------------------------------------------
-def get_gemini_client():
-    os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY
-    return genai.Client()
-
-# ---------------------------------------------------------------------------
 # MAIN APP HEADER
 # ---------------------------------------------------------------------------
 st.title("🚀 OmniLecture AI Study Assistant")
@@ -184,8 +176,6 @@ tabs = st.tabs([
     "👨‍🏫 AI Professor Chat"
 ])
 
-client = get_gemini_client()
-
 # ===========================================================================
 # TAB 1: DETAILED SUMMARY & BILINGUAL GUIDE
 # ===========================================================================
@@ -194,32 +184,27 @@ with tabs[0]:
     st.markdown("Thorough breakdown of all main topics, key sections, practical benefits, paired with comprehensive Arabic translations.")
     
     if st.button("Generate Detailed Bilingual Summary", key="gen_summary_btn"):
-        if not client:
-            st.error("Gemini Client initialization failed.")
-        else:
-            with st.spinner("Analyzing document structure and translating key insights..."):
-                prompt = f"""
-                Analyze the following academic text extracted from a PDF lecture. 
-                Extract all major topics and sections. For each topic, provide:
-                1. Topic Title (English)
-                2. Detailed Summary (English)
-                3. Practical Benefit / Learning Outcome (English)
-                4. Full Professional Arabic Translation / Equivalent for the section & summary.
+        with st.spinner("Analyzing document structure and translating key insights..."):
+            prompt = f"""
+            Analyze the following academic text extracted from a PDF lecture. 
+            Extract all major topics and sections. For each topic, provide:
+            1. Topic Title (English)
+            2. Detailed Summary (English)
+            3. Practical Benefit / Learning Outcome (English)
+            4. Full Professional Arabic Translation / Equivalent for the section & summary.
 
-                Format your response clearly using Markdown sections, bullet points, and headers.
+            Format your response clearly using Markdown sections, bullet points, and headers.
+            
+            Document Text:
+            {st.session_state.pdf_text[:12000]}
+            """
+            try:
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                response = model.generate_content(prompt)
+                st.session_state.summary_data = response.text
+            except Exception as e:
+                st.error(f"Error generating summary: {e}")
                 
-                Document Text:
-                {st.session_state.pdf_text[:12000]}
-                """
-                try:
-                    response = client.models.generate_content(
-                        model='gemini-1.5-flash',
-                        contents=prompt
-                    )
-                    st.session_state.summary_data = response.text
-                except Exception as e:
-                    st.error(f"Error generating summary: {e}")
-                    
     if st.session_state.summary_data:
         st.markdown(st.session_state.summary_data)
 
@@ -232,40 +217,37 @@ with tabs[1]:
     
     if not st.session_state.exam_data:
         if st.button("Generate 30-Question Adaptive Exam", key="gen_exam_btn"):
-            if not client:
-                st.error("Gemini Client initialization failed.")
-            else:
-                with st.spinner("Extracting concepts and generating 30 high-level adaptive questions..."):
-                    prompt = f"""
-                    Based strictly on the following PDF document content, generate exactly 30 multiple-choice questions (MCQs).
-                    Divide the questions into 3 distinct difficulty tiers:
-                    - 10 Easy Questions (Level 1)
-                    - 10 Medium Questions (Level 2)
-                    - 10 Hard Questions (Level 3)
+            with st.spinner("Extracting concepts and generating 30 high-level adaptive questions..."):
+                prompt = f"""
+                Based strictly on the following PDF document content, generate exactly 30 multiple-choice questions (MCQs).
+                Divide the questions into 3 distinct difficulty tiers:
+                - 10 Easy Questions (Level 1)
+                - 10 Medium Questions (Level 2)
+                - 10 Hard Questions (Level 3)
 
-                    You MUST output the result strictly in valid JSON format without markdown code blocks, structured as a list of objects, where each object has:
-                    - "id": integer (1 to 30)
-                    - "level": string ("Easy", "Medium", or "Hard")
-                    - "question": string
-                    - "options": list of 4 strings
-                    - "answer": string (exact match of the correct option)
-                    - "explanation": string (scientific explanation of why the answer is correct)
+                You MUST output the result strictly in valid JSON format without markdown code blocks, structured as a list of objects, where each object has:
+                - "id": integer (1 to 30)
+                - "level": string ("Easy", "Medium", or "Hard")
+                - "question": string
+                - "options": list of 4 strings
+                - "answer": string (exact match of the correct option)
+                - "explanation": string (scientific explanation of why the answer is correct)
 
-                    Document Text:
-                    {st.session_state.pdf_text[:14000]}
-                    """
-                    try:
-                        response = client.models.generate_content(
-                            model='gemini-1.5-flash',
-                            contents=prompt,
-                            config=types.GenerateContentConfig(response_mime_type="application/json")
-                        )
-                        import json
-                        st.session_state.exam_data = json.loads(response.text)
-                        st.session_state.exam_submitted = False
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error generating exam data: {e}")
+                Document Text:
+                {st.session_state.pdf_text[:14000]}
+                """
+                try:
+                    model = genai.GenerativeModel(
+                        model_name='gemini-1.5-flash',
+                        generation_config={"response_mime_type": "application/json"}
+                    )
+                    response = model.generate_content(prompt)
+                    import json
+                    st.session_state.exam_data = json.loads(response.text)
+                    st.session_state.exam_submitted = False
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error generating exam data: {e}")
     
     if st.session_state.exam_data:
         exam_questions = st.session_state.exam_data
@@ -348,30 +330,27 @@ with tabs[3]:
     st.markdown("Quick revision flashcards and a comprehensive technical glossary extracted from your document.")
     
     if st.button("Generate Flashcards & Glossary", key="gen_flash_btn"):
-        if not client:
-            st.error("Gemini Client initialization failed.")
-        else:
-            with st.spinner("Extracting glossary terms and flashcard pairs..."):
-                prompt = f"""
-                Extract key academic/technical terms and definitions from the text, and create key flashcard questions.
-                Output strictly in valid JSON format without markdown code blocks with two keys:
-                1. "glossary": list of objects with keys "term", "definition", "arabic_translation"
-                2. "flashcards": list of objects with keys "front", "back"
+        with st.spinner("Extracting glossary terms and flashcard pairs..."):
+            prompt = f"""
+            Extract key academic/technical terms and definitions from the text, and create key flashcard questions.
+            Output strictly in valid JSON format without markdown code blocks with two keys:
+            1. "glossary": list of objects with keys "term", "definition", "arabic_translation"
+            2. "flashcards": list of objects with keys "front", "back"
 
-                Document Text:
-                {st.session_state.pdf_text[:10000]}
-                """
-                try:
-                    response = client.models.generate_content(
-                        model='gemini-1.5-flash',
-                        contents=prompt,
-                        config=types.GenerateContentConfig(response_mime_type="application/json")
-                    )
-                    import json
-                    st.session_state.flash_glossary = json.loads(response.text)
-                except Exception as e:
-                    st.error(f"Error generating flashcards: {e}")
-                    
+            Document Text:
+            {st.session_state.pdf_text[:10000]}
+            """
+            try:
+                model = genai.GenerativeModel(
+                    model_name='gemini-1.5-flash',
+                    generation_config={"response_mime_type": "application/json"}
+                )
+                response = model.generate_content(prompt)
+                import json
+                st.session_state.flash_glossary = json.loads(response.text)
+            except Exception as e:
+                st.error(f"Error generating flashcards: {e}")
+                
     if st.session_state.flash_glossary:
         fg = st.session_state.flash_glossary
         
@@ -419,32 +398,36 @@ with tabs[5]:
             
     user_query = st.chat_input("Ask your professor anything about the lecture...")
     if user_query:
-        if not client:
-            st.error("Gemini Client initialization failed.")
-        else:
-            st.session_state.chat_history.append({"role": "user", "content": user_query})
-            with st.chat_message("user"):
-                st.markdown(user_query)
+        st.session_state.chat_history.append({"role": "user", "content": user_query})
+        with st.chat_message("user"):
+            st.markdown(user_query)
+            
+        with st.chat_message("assistant"):
+            with st.spinner("Professor is thinking..."):
+                system_instruction = f"""
+                You are an expert AI Professor Assistant for the subject/lecture titled '{st.session_state.file_name}'.
+                Your task is to answer student questions accurately, professionally, and pedagogically based strictly on the provided lecture document text.
                 
-            with st.chat_message("assistant"):
-                with st.spinner("Professor is thinking..."):
-                    system_instruction = f"""
-                    You are an expert AI Professor Assistant for the subject/lecture titled '{st.session_state.file_name}'.
-                    Your task is to answer student questions accurately, professionally, and pedagogically based strictly on the provided lecture document text.
-                    
-                    Document Context:
-                    {st.session_state.pdf_text}
-                    """
-                    try:
-                        chat = client.chats.create(
-                            model="gemini-1.5-flash",
-                            config=types.GenerateContentConfig(system_instruction=system_instruction)
-                        )
-                        response = chat.send_message(user_query)
-                        answer = response.text
-                        st.markdown(answer)
-                        st.session_state.chat_history.append({"role": "assistant", "content": answer})
-                    except Exception as e:
-                        err_msg = f"Error communicating with AI Professor: {e}"
-                        st.error(err_msg)
-                        st.session_state.chat_history.append({"role": "assistant", "content": err_msg})
+                Document Context:
+                {st.session_state.pdf_text}
+                """
+                try:
+                    chat_model = genai.GenerativeModel(
+                        model_name='gemini-1.5-flash',
+                        system_instruction=system_instruction
+                    )
+                    # تحويل سجل المحادثة السابق ليتوافق مع هيكل ChatSession الخاص بالمكتبة القديمة
+                    history_formatted = []
+                    for h in st.session_state.chat_history[:-1]:
+                        role_map = "user" if h["role"] == "user" else "model"
+                        history_formatted.append({"role": role_map, "parts": [h["content"]]})
+                        
+                    chat_session = chat_model.start_chat(history=history_formatted)
+                    response = chat_session.send_message(user_query)
+                    answer = response.text
+                    st.markdown(answer)
+                    st.session_state.chat_history.append({"role": "assistant", "content": answer})
+                except Exception as e:
+                    err_msg = f"Error communicating with AI Professor: {e}"
+                    st.error(err_msg)
+                    st.session_state.chat_history.append({"role": "assistant", "content": err_msg})
