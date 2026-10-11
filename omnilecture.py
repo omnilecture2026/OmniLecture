@@ -8,7 +8,7 @@ from google.genai import types
 # ---------------------------------------------------------------------------
 # HARDCODED GEMINI API KEY CONFIGURATION (Permanent Background Key)
 # ---------------------------------------------------------------------------
-GEMINI_API_KEY = "AQ.Ab8RN6K49yuzdPGKOz0fijWNjJyFK_PtbEaxMtvFr0MPoBz0zZg" # ضع مفتاحك الحقيقي هنا
+GEMINI_API_KEY = "AQ.Ab8RN6JI2P7-2lqC2GlzKzFuUPxVz7FPpqJ36ivCUYNVfq4vLA" # ضع مفتاحك الحقيقي هنا
 
 # ---------------------------------------------------------------------------
 # PAGE CONFIGURATION & HIGH-CONTRAST DARK THEME STYLING
