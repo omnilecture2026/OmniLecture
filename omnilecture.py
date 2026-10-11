@@ -7,7 +7,7 @@ import google.generativeai as genai
 # ---------------------------------------------------------------------------
 # HARDCODED GEMINI API KEY CONFIGURATION (Permanent Background Key)
 # ---------------------------------------------------------------------------
-GEMINI_API_KEY = "AQ.Ab8RN6JI2P7-21qC2G1zKzFuUPxVz7FPpqJ36ivCUYNVfq4vLA"
+GEMINI_API_KEY = "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"
 
 # إعداد وتكوين المفتاح باستخدام المكتبة الكلاسيكية المستقرة
 genai.configure(api_key=GEMINI_API_KEY)
