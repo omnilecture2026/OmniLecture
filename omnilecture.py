@@ -10,6 +10,9 @@ from google.genai import types
 # ---------------------------------------------------------------------------
 GEMINI_API_KEY = "AQ.Ab8RN6JI2P7-21qC2G1zKzFuUPxVz7FPpqJ36ivCUYNVfq4vLA"
 
+# تعيين مفتاح البيئة مباشرة لتجنب أي محاولة اتصال تعتمد على ADC أو OAuth
+os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY
+
 # ---------------------------------------------------------------------------
 # PAGE CONFIGURATION & HIGH-CONTRAST DARK THEME STYLING
 # ---------------------------------------------------------------------------
@@ -153,10 +156,11 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
-# DIRECT GENAI CLIENT INITIALIZATION (Pure API Key, No OAuth)
+# DIRECT GENAI CLIENT INITIALIZATION (Using Environment Variable)
 # ---------------------------------------------------------------------------
 def get_gemini_client():
-    return genai.Client(api_key=GEMINI_API_KEY)
+    os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY
+    return genai.Client()
 
 # ---------------------------------------------------------------------------
 # MAIN APP HEADER
