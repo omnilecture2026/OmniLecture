@@ -6,6 +6,11 @@ from google import genai
 from google.genai import types
 
 # ---------------------------------------------------------------------------
+# HARDCODED GEMINI API KEY CONFIGURATION (Permanent Background Key)
+# ---------------------------------------------------------------------------
+GEMINI_API_KEY = "YOUR_ACTUAL_API_KEY_HERE" # ضع مفتاحك الحقيقي هنا
+
+# ---------------------------------------------------------------------------
 # PAGE CONFIGURATION & HIGH-CONTRAST DARK THEME STYLING
 # ---------------------------------------------------------------------------
 st.set_page_config(
@@ -110,24 +115,19 @@ if "exam_submitted" not in st.session_state:
     st.session_state.exam_submitted = False
 
 # ---------------------------------------------------------------------------
-# SIDEBAR - NAVIGATION & PDF UPLOAD
+# SIDEBAR - NAVIGATION & PDF UPLOAD (API Input removed completely)
 # ---------------------------------------------------------------------------
 with st.sidebar:
     st.markdown("## 🎓 OmniLecture")
     st.markdown("### AI Study Assistant")
     st.markdown("---")
     
-    # API Key Input
-    api_key_input = st.text_input("Gemini API Key", type="password", placeholder="Enter your Gemini API key...")
-    
-    st.markdown("---")
     st.markdown("### 📂 Document Upload")
     uploaded_file = st.file_uploader("Upload Lecture PDF", type=["pdf"])
     
     if uploaded_file is not None:
         if st.session_state.file_name != uploaded_file.name:
             st.session_state.file_name = uploaded_file.name
-            # Extract text using pypdf
             try:
                 reader = PdfReader(uploaded_file)
                 extracted_text = ""
@@ -136,7 +136,7 @@ with st.sidebar:
                     if text:
                         extracted_text += text + "\n"
                 st.session_state.pdf_text = extracted_text
-                uploaded_file.seek(0) # Reset pointer for viewer
+                uploaded_file.seek(0)
                 st.session_state.pdf_bytes = uploaded_file.read()
                 
                 # Reset previous caches on new file upload
@@ -152,21 +152,21 @@ with st.sidebar:
         
         st.info(f"**File:** {st.session_state.file_name}\n\n**Length:** {len(st.session_state.pdf_text)} characters")
     
-    # Permanent Signature requested precisely at the bottom-left of sidebar
+    # Permanent Signature at the bottom-left of sidebar
     st.markdown("""
         <div class="sidebar-signature">
             👨‍💻 𝒟ℯ𝓋ℯ𝓁ℴ𝓅ℯ𝒹 𝒷𝓎 𝓌𝒶𝓁𝒶𝒶 𝓈𝒶𝓁𝒾𝓂 ༄
         </div>
     """, unsafe_allow_html=True)
 
-# Helper function to get Gemini Client
+# Helper function to get Gemini Client using the hardcoded key
 def get_gemini_client():
-    if api_key_input:
-        return genai.Client(api_key=api_key_input)
+    if GEMINI_API_KEY and GEMINI_API_KEY != "YOUR_ACTUAL_API_KEY_HERE":
+        return genai.Client(api_key=GEMINI_API_KEY)
     env_key = os.environ.get("GEMINI_API_KEY")
     if env_key:
         return genai.Client(api_key=env_key)
-    return None
+    return genai.Client(api_key=GEMINI_API_KEY)
 
 # ---------------------------------------------------------------------------
 # MAIN APP HEADER
@@ -201,7 +201,7 @@ with tabs[0]:
     
     if st.button("Generate Detailed Bilingual Summary", key="gen_summary_btn"):
         if not client:
-            st.error("Please provide a valid Gemini API Key in the sidebar.")
+            st.error("Gemini Client initialization failed. Check your API key.")
         else:
             with st.spinner("Analyzing document structure and translating key insights..."):
                 prompt = f"""
@@ -239,7 +239,7 @@ with tabs[1]:
     if not st.session_state.exam_data:
         if st.button("Generate 30-Question Adaptive Exam", key="gen_exam_btn"):
             if not client:
-                st.error("Please provide a valid Gemini API Key in the sidebar.")
+                st.error("Gemini Client initialization failed. Check your API key.")
             else:
                 with st.spinner("Extracting concepts and generating 30 high-level adaptive questions..."):
                     prompt = f"""
@@ -284,7 +284,6 @@ with tabs[1]:
                 level_badge = "🟢 Easy" if q["level"]=="Easy" else ("🟡 Medium" if q["level"]=="Medium" else "🔴 Hard")
                 st.markdown(f"**Q{q_id} ({level_badge}):** {q['question']}")
                 
-                # index=None makes sure all options are unselected by default
                 ans = st.radio(
                     f"Select answer for Q{q_id}",
                     options=q["options"],
@@ -356,7 +355,7 @@ with tabs[3]:
     
     if st.button("Generate Flashcards & Glossary", key="gen_flash_btn"):
         if not client:
-            st.error("Please provide a valid Gemini API Key in the sidebar.")
+            st.error("Gemini Client initialization failed. Check your API key.")
         else:
             with st.spinner("Extracting glossary terms and flashcard pairs..."):
                 prompt = f"""
@@ -420,7 +419,6 @@ with tabs[5]:
     st.header("👨‍🏫 AI Professor Chatbot")
     st.markdown("Interact directly with your virtual professor assistant who has total context of your uploaded lecture file.")
     
-    # Display chat history
     for message in st.session_state.chat_history:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
@@ -428,7 +426,7 @@ with tabs[5]:
     user_query = st.chat_input("Ask your professor anything about the lecture...")
     if user_query:
         if not client:
-            st.error("Please provide a valid Gemini API Key in the sidebar.")
+            st.error("Gemini Client initialization failed. Check your API key.")
         else:
             st.session_state.chat_history.append({"role": "user", "content": user_query})
             with st.chat_message("user"):
@@ -448,7 +446,6 @@ with tabs[5]:
                             model="gemini-2.5-flash",
                             config=types.GenerateContentConfig(system_instruction=system_instruction)
                         )
-                        # Rebuild previous turns in chat session if needed, or send message with context
                         response = chat.send_message(user_query)
                         answer = response.text
                         st.markdown(answer)
